@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         微博热搜明星与广告过滤器
 // @namespace    http://tampermonkey.net/
-// @version      0.4
+// @version      0.5
 // @description  过滤微博热搜中包含明星名字和广告的条目，从远程JSON读取名单
 // @author       Grok
 // @match        https://s.weibo.com/top/summary?cate=*
@@ -20,11 +20,16 @@
     // 从远程JSON加载名单
     GM_xmlhttpRequest({
         method: 'GET',
-        url: 'https://raw.githubusercontent.com/Gahulv/filter_people/refs/heads/main/filter.json', // 替换为你的JSON文件URL
+        url: 'https://raw.githubusercontent.com/yourusername/your-repo/main/filter.json', // 替换为您的 raw URL
         onload: function(response) {
             try {
                 const data = JSON.parse(response.responseText);
-                celebrityNames = [...new Set(data.names || [])];
+                console.log('JSON 数据:', data); // 调试：输出原始 JSON
+                celebrityNames = [...new Set(data.blockList || [])]; // 使用 blockList 字段
+                console.log('名人列表:', celebrityNames); // 调试：输出处理后的列表
+                if (!celebrityNames.length) {
+                    console.warn('名人列表为空，使用默认名单');
+                }
                 // 更新正则表达式
                 regex = new RegExp(celebrityNames.map(name => name.replace(/\s+/g, '')).join('|'), 'i');
                 // 重新执行过滤
@@ -51,16 +56,23 @@
     // 过滤热搜列表
     function filterHotSearch() {
         const hotSearchItems = document.querySelectorAll('#pl_top_realtimehot tr');
-        if (!hotSearchItems.length) return;
+        if (!hotSearchItems.length) {
+            console.warn('未找到热搜列表元素'); // 调试
+            return;
+        }
 
         hotSearchItems.forEach(item => {
-            const titleElement = item.querySelector('td.td-02 a, a[href*="/weibo?q="]');
-            const isAd = item.querySelector('a[action-type="realtimehot_ad"], .ad-icon, [class*="ad"]') !== null;
+            const titleElement = item.querySelector('td.td-02 a');
+            const isAd = item.querySelector('a[action-type="realtimehot_ad"], .ad-icon') !== null;
 
             if (titleElement) {
                 const titleText = titleElement.textContent.trim().replace(/\s+/g, '');
-                if (regex.test(titleText) || isAd) {
+                const isCelebrity = regex.test(titleText);
+                console.log(`标题: ${titleText}, 是否名人: ${isCelebrity}, 是否广告: ${isAd}`); // 调试
+                if (isCelebrity || isAd) {
                     item.classList.add('filtered-out');
+                } else {
+                    item.classList.remove('filtered-out'); // 确保不过滤非匹配项
                 }
             }
         });
@@ -84,5 +96,7 @@
             childList: true,
             subtree: true
         });
+    } else {
+        console.warn('未找到 #pl_top_realtimehot 元素'); // 调试
     }
 })();
