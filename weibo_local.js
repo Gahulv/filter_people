@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         微博热搜明星与广告过滤器
 // @namespace    http://tampermonkey.net/
-// @version      0.5
+// @version      0.6
 // @description  过滤微博热搜中包含明星名字和广告的条目，从远程JSON读取名单
 // @author       Grok
 // @match        https://s.weibo.com/top/summary?cate=*
@@ -12,34 +12,40 @@
 (function() {
     'use strict';
 
-    // 默认名人列表
+    // 默认名人列表（去掉可能导致过匹配的项）
     let celebrityNames = [
-        "王楚钦", "杨幂", "任嘉伦", "汤唯", "姚晨"
+        "王楚钦", "杨幂", "任嘉伦", "汤唯", "姚晨","黄子韬"
     ];
 
     // 从远程JSON加载名单
     GM_xmlhttpRequest({
         method: 'GET',
-        url: 'https://raw.githubusercontent.com/yourusername/your-repo/main/filter.json', // 替换为您的 raw URL
+        url: 'https://raw.githubusercontent.com/Gahulv/filter_people/refs/heads/main/filter.json', // 替换为您的 raw URL
         onload: function(response) {
             try {
                 const data = JSON.parse(response.responseText);
                 console.log('JSON 数据:', data); // 调试：输出原始 JSON
-                celebrityNames = [...new Set(data.blockList || [])]; // 使用 blockList 字段
+                if (!data.blockList || !Array.isArray(data.blockList)) {
+                    throw new Error('blockList 字段缺失或格式错误');
+                }
+                celebrityNames = [...new Set(data.blockList)];
                 console.log('名人列表:', celebrityNames); // 调试：输出处理后的列表
                 if (!celebrityNames.length) {
                     console.warn('名人列表为空，使用默认名单');
                 }
+                // 过滤掉可能导致过匹配的泛化词
+                celebrityNames = celebrityNames.filter(name => name !== '内娱');
                 // 更新正则表达式
                 regex = new RegExp(celebrityNames.map(name => name.replace(/\s+/g, '')).join('|'), 'i');
+                console.log('正则表达式:', regex.source); // 调试：输出正则
                 // 重新执行过滤
                 filterHotSearch();
             } catch (e) {
-                console.error('加载名人列表失败:', e);
+                console.error('加载名人列表失败:', e, '响应内容:', response.responseText);
             }
         },
-        onerror: function() {
-            console.error('无法获取JSON文件，使用默认名单');
+        onerror: function(error) {
+            console.error('无法获取JSON文件:', error, '使用默认名单');
         }
     });
 
@@ -72,8 +78,10 @@
                 if (isCelebrity || isAd) {
                     item.classList.add('filtered-out');
                 } else {
-                    item.classList.remove('filtered-out'); // 确保不过滤非匹配项
+                    item.classList.remove('filtered-out');
                 }
+            } else {
+                console.log('未找到标题元素:', item); // 调试
             }
         });
     }
